@@ -1,0 +1,19 @@
+# Compilation
+*.class
+bin/
+out/
+
+# IDE (VS Code, IntelliJ, Eclipse)
+.history/
+.idea/
+*.iml
+.project
+.classpath
+.settings/
+
+# Système
+.DS_Store
+Thumbs.db
+
+# Base de données (On la garde SAUF si vous voulez une base vide à chaque fois)
+# chat.db
