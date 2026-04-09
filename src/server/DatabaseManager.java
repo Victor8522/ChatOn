@@ -3,6 +3,8 @@ package server;
 import java.sql.*;
 import java.util.*;
 
+import common.Message;
+
 /**
  * Le serveur reçoit déjà un hash de la part du client.
  * verifierLogin() compare simplement deux hash en BD — aucun mot de passe
@@ -10,50 +12,6 @@ import java.util.*;
  */
 public class DatabaseManager {
     private static final String URL = "jdbc:sqlite:chat.db";
-
-    public static void initialiser() {
-        try { Class.forName("org.sqlite.JDBC"); }
-        catch (ClassNotFoundException e) {
-            System.err.println("Driver SQLite non trouvé !");
-            return;
-        }
-        String[] tables = {
-            "CREATE TABLE IF NOT EXISTS users ("
-                + " id INTEGER PRIMARY KEY AUTOINCREMENT,"
-                + " username TEXT NOT NULL UNIQUE,"
-                + " password_hash TEXT NOT NULL,"
-                + " email TEXT UNIQUE,"
-                + " status TEXT NOT NULL DEFAULT 'offline'"
-                + ")",
-            "CREATE TABLE IF NOT EXISTS groups ("
-                + " id INTEGER PRIMARY KEY AUTOINCREMENT,"
-                + " name TEXT NOT NULL"
-                + ")",
-            "CREATE TABLE IF NOT EXISTS group_members ("
-                + " group_id INTEGER NOT NULL,"
-                + " user_id  INTEGER NOT NULL,"
-                + " PRIMARY KEY (group_id, user_id),"
-                + " FOREIGN KEY (group_id) REFERENCES groups(id),"
-                + " FOREIGN KEY (user_id)  REFERENCES users(id)"
-                + ")",
-            "CREATE TABLE IF NOT EXISTS messages ("
-                + " id INTEGER PRIMARY KEY AUTOINCREMENT,"
-                + " sender_id INTEGER NOT NULL,"
-                + " group_id  INTEGER NOT NULL,"
-                + " content   TEXT NOT NULL,"
-                + " sent_at   TEXT NOT NULL DEFAULT (datetime('now')),"
-                + " FOREIGN KEY (sender_id) REFERENCES users(id),"
-                + " FOREIGN KEY (group_id)  REFERENCES groups(id)"
-                + ")"
-        };
-        try (Connection conn = DriverManager.getConnection(URL);
-             Statement  stmt = conn.createStatement()) {
-            for (String sql : tables) stmt.execute(sql);
-            System.out.println("Base de données prête.");
-        } catch (SQLException e) {
-            System.err.println("Erreur init DB : " + e.getMessage());
-        }
-    }
 
     /**
      * Vérifie le login en comparant directement deux hash en SQL.
@@ -113,4 +71,91 @@ public class DatabaseManager {
         }
         return membres;
     }
+
+    public static List<Integer> getGroupesUtilisateur(int userId) {
+        List<Integer> groupes = new ArrayList<>();
+        String sql = "SELECT group_id FROM group_members WHERE user_id = ?";
+        try (Connection conn = DriverManager.getConnection(URL);
+             PreparedStatement p = conn.prepareStatement(sql)) {
+            p.setInt(1, userId);
+            ResultSet rs = p.executeQuery();
+            while (rs.next()) groupes.add(rs.getInt("group_id"));
+        } catch (SQLException e) {
+            System.err.println("Erreur getGroupes : " + e.getMessage());
+        }
+        return groupes;
+    }
+
+    public static List<Message> getMessagesGroupe(int groupId) {
+        List<Message> messages = new ArrayList<>();
+        String sql = "SELECT sender_id, content, timestamp FROM messages WHERE group_id = ? ORDER BY timestamp";
+        try (Connection conn = DriverManager.getConnection(URL);
+             PreparedStatement p = conn.prepareStatement(sql)) {
+            p.setInt(1, groupId);
+            ResultSet rs = p.executeQuery();
+            while (rs.next()) {
+                messages.add(new Message(rs.getInt("sender_id"), groupId, rs.getString("content"), null));
+            }
+        } catch (SQLException e) {
+            System.err.println("Erreur getMessages : " + e.getMessage());
+        }
+        return messages;
+    }
+
+    public static boolean createUser(String username, String passwordHash) {
+        String sql = "INSERT INTO users(username, password_hash) VALUES(?,?)";
+        try (Connection conn = DriverManager.getConnection(URL);
+             PreparedStatement p = conn.prepareStatement(sql)) {
+            p.setString(1, username);
+            p.setString(2, passwordHash);
+            p.executeUpdate();
+            return true;
+        } catch (SQLException e) {
+            System.err.println("Erreur createUser : " + e.getMessage());
+            return false;
+        }
+    }
+
+    public static boolean createGroup(String groupName, List<Integer> membres) {
+        String sqlGroup = "INSERT INTO groups(name) VALUES(?)";
+        String sqlMember = "INSERT INTO group_members(group_id, user_id) VALUES(?,?)";
+        try (Connection conn = DriverManager.getConnection(URL);
+             PreparedStatement pGroup = conn.prepareStatement(sqlGroup, Statement.RETURN_GENERATED_KEYS)) {
+            pGroup.setString(1, groupName);
+            pGroup.executeUpdate();
+            ResultSet rs = pGroup.getGeneratedKeys();
+            if (rs.next()) {
+                int groupId = rs.getInt(1);
+                try (PreparedStatement pMember = conn.prepareStatement(sqlMember)) {
+                    for (int userId : membres) {
+                        pMember.setInt(1, groupId);
+                        pMember.setInt(2, userId);
+                        pMember.executeUpdate();
+                    }
+                }
+                return true;
+            }
+        } catch (SQLException e) {
+            System.err.println("Erreur createGroup : " + e.getMessage());
+        }
+        return false;
+    }
+
+    public static List<String> getUser(int userId) {
+        List<String> info = new ArrayList<>();
+        String sql = "SELECT username, status FROM users WHERE id = ?";
+        try (Connection conn = DriverManager.getConnection(URL);
+             PreparedStatement p = conn.prepareStatement(sql)) {
+            p.setInt(1, userId);
+            ResultSet rs = p.executeQuery();
+            if (rs.next()) {
+                info.add(rs.getString("username"));
+                info.add(rs.getString("status"));
+            }
+        } catch (SQLException e) {
+            System.err.println("Erreur getUser : " + e.getMessage());
+        }
+        return info;
+    }
+
 }

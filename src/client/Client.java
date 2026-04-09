@@ -66,13 +66,13 @@ public class Client {
         }
     }
 
-    public void sendMessage(String text, int groupId) {
+    public void sendMessage(int userId, String text, int groupId) {
         if (!connected) {
             System.err.println("Non connecté.");
             return;
         }
         try {
-            oos.writeObject(new Message(groupId, text));
+            oos.writeObject(new Message(userId, groupId, text, null));
             oos.flush();
         } catch (IOException e) {
             System.err.println("Erreur envoi : " + e.getMessage());
@@ -129,7 +129,7 @@ public class Client {
             try {
                 int    groupId = Integer.parseInt(line.substring(0, space));
                 String text    = line.substring(space + 1);
-                client.sendMessage(text, groupId);
+                client.sendMessage(client.getUserId(), text, groupId);
             } catch (NumberFormatException e) {
                 System.out.println("groupId invalide.");
             }
